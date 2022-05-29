@@ -1,0 +1,181 @@
+---
+title: An R Markdown for environmental-footprints
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+# Context:
+
+As the world's population has expanded and gotten richer, the demand for food, energy and water has seen a rapid increase. Not only has demand for all three increased, but they are also strongly interlinked: food production requires water and energy; traditional energy production demands water resources; agriculture provides a potential energy source. This project focuses on the environmental impacts of food. Ensuring everyone in the world has access to a nutritious diet in a sustainable way is one of the greatest challenges we face.
+
+# Questions:
+
+-   Which types of food have more negative impact on the environment?
+-   What types of food production should be encouraged to consume nutritious diet in a sustainable way?
+-   Which stage of food production contributes more to the greenhouse gas emission?
+-   Compare carbon footprint of plant-based foods?
+-   Compare carbon footprint of animal-based foods?
+-   Compare carbon footprint of protein rich foods?
+
+```{r}
+library(tidyverse)
+```
+
+# 1. Loading data from a CSV file
+
+```{r}
+data<-read_csv("./input/environment-impact-of-food-production/Food_Production.csv")
+head(data)
+```
+
+# 2. Cleaning the data
+
+Investigating the structure of data
+
+```{r}
+str(data)
+```
+
+replacing spaces in column names with '\_'
+
+```{r}
+names(data)
+names(data)<- gsub("[[:space:]+]", "_", names(data))
+names(data)
+```
+
+check the data types inferred and convert them if necessary
+
+```{r}
+data <- type_convert(data)
+#chocolateData$Cocoa_Percent <- sapply(chocolateData$Cocoa_Percent, function(x) gsub("%", "", x))
+```
+
+# 3. Exploring the data
+
+```{r}
+summary(data)
+```
+
+```{r}
+summarise_all(data, funs(mean))
+```
+
+```{r}
+# filtering and exploring some columns and rows in the data
+
+#data %>%
+    #group_by() %>%
+#    summarise(averageFeed = mean(Land_use_change),
+#             FeedSD = sd(Land_use_change))
+#ncol(data)
+#data%>%select(Animal_Feed) %>% summary()
+#data[,c("Animal_Feed","Farm")] %>%summary()
+#data.filter(Product="Rice")
+
+#data%>%filter(data['Food product']=='Rice')
+#head(data['Processing']) # or data[5]
+#data[1,1] #first row first column 
+#data[1,] #first row
+#data[-1,] #everything except first row
+```
+
+# 4. Answering questions
+
+**Which types of food have more negative impact on the environment?**
+
+```{r}
+data %>% arrange(desc(Total_emissions)) %>% head()
+```
+
+coffee and chocolate are in the top ten products that produce the highest amount of emission , however, they do not provide any calories but their production use so much resources, so measurements such as `Scarcity-weighted_water_use_per_1000kcal_(liters_per_1000_kilocalories)` is very high for such products. Thus, the following question comes up:
+
+**What types of food production should be encouraged to consume nutritious diet in a sustainable way?**
+
+```{r}
+data %>% arrange(Total_emissions) %>% head(10)
+```
+
+```{r}
+water<- "Scarcity-weighted_water_use_per_1000kcal_(liters_per_1000_kilocalories)"
+co2<-"Greenhouse_gas_emissions_per_1000kcal_(kgCO₂eq_per_1000kcal)"
+land<-"Land_use_per_1000kcal_(m²_per_1000kcal)"
+waste<-"Freshwater_withdrawals_per_1000kcal_(liters_per_1000kcal)"
+data %>% arrange(desc(water), desc(co2),desc(land), desc(waste)) %>% head(10)
+```
+
+```{r}
+water<- "Scarcity-weighted_water_use_per_100g_protein_(liters_per_100g_protein)"
+co2<-"Greenhouse_gas_emissions_per_100g_protein_(kgCO₂eq_per_100g_protein)"
+land<-"Land_use_per_100g_protein_(m²_per_100g_protein)"
+waste<-"Freshwater_withdrawals_per_100g_protein_(liters_per_100g_protein)"
+data %>% arrange(desc(water), desc(co2), desc(land), desc(waste)) %>% head(10)
+```
+
+```{r}
+plt<-ggplot(data=data, mapping=aes(y=Food_product, x=Total_emissions))+
+geom_col()+
+theme_minimal()+
+ggtitle("Emission of Food Products")
+
+# save our plot
+ggsave("product_emmisions.png", # the name of the file where it will be save
+       plot = plt, # what plot to save
+       height=6, width=10, units="in")
+plt
+```
+
+**Which stage of food production contributes more to the greenhouse gas emission?**
+
+```{r}
+ 
+ggplot(data=data)+
+geom_point(mapping=aes(x=Farm, y=Total_emissions), color="green") +
+geom_point(mapping=aes(x=Land_use_change, y=Total_emissions), color="yellow") +
+geom_point(mapping=aes(x=Animal_Feed, y=Total_emissions), color="red") +
+geom_point(mapping=aes(x=Transport, y=Total_emissions), color="blue") +
+geom_point(mapping=aes(x=Processing, y=Total_emissions), color="black") +
+geom_point(mapping=aes(x=Retail, y=Total_emissions), color="orange")
+```
+
+```{r}
+#install.packages("reshape2")
+library(reshape2)
+cols<-c("Total_emissions", "Land_use_change","Animal_Feed","Farm","Processing","Transport","Packging","Retail")
+corr_mat <- round(cor(data[cols]),2)
+corr_mat
+ 
+# reduce the corr matrix
+melted_corr_mat <- melt(corr_mat)
+ 
+# plotting the corr heatmap
+ggplot(data = melted_corr_mat, aes(x=Var1,
+                                   y=Var2,
+                                   fill=value)) +
+  geom_tile()
+```
+
+Farming, Processing and Land use change has the highest emission contribution
+
+Hypothesis : the plant based food produce less emission
+
+```{r}
+qqnorm(data$Total_emissions)
+```
+
+```{r}
+new_data<-data%>% mutate(Plant_based=Animal_Feed<=0)
+new_data
+```
+
+```{r}
+t.test(new_data$Total_emissions ~ new_data$Plant_based)
+```
+
+```{r}
+ggplot(data = new_data, aes(x = Total_emissions, fill = Plant_based)) +
+geom_histogram(binwidth=10)
+```
